@@ -185,4 +185,6 @@ return [
         // 'Example' => App\Facades\Example::class,
     ])->toArray(),
 
+    'WHAPI_API_URL' => env('WHAPI_API_URL', 'https://gate.whapi.cloud/'),
+
 ];

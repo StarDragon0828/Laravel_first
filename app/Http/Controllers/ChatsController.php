@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Storage;
 use App\Models\WhatsappInstance;
 use App\Models\WhatsappContact;
 use App\Models\WhatsappMessage;
+use Exception;
 use Response;
 
 class ChatsController extends Controller
@@ -37,11 +38,11 @@ class ChatsController extends Controller
 
         return view('chats.index', $data);
     }
-    
+
     public function chat(Request $request, $id)
     {
         $instance = WhatsappInstance::find($id);
-        if($instance->status == 0) {
+        if ($instance->status == 0) {
             return redirect()->route('instances')->with('status', 'Chat Session Has Been Expired!');
         }
         $contacts = ChatService::getChatData($id);
@@ -59,7 +60,7 @@ class ChatsController extends Controller
     public function searchContacts(Request $request, $id)
     {
         $instance = WhatsappInstance::find($id);
-        if($instance->status == 0) {
+        if ($instance->status == 0) {
             return redirect()->route('instances')->with('status', 'Chat Session Has Been Expired!');
         }
         $searchTerm = $request->input('searchTerm');
@@ -72,8 +73,8 @@ class ChatsController extends Controller
     public function message(Request $request)
     {
         $decodedJson = json_decode($request->getContent(), true);
-        if(isset($decodedJson['imageUrl']) && $decodedJson['imageUrl'] !=null && isset($decodedJson['sessionQr']) && $decodedJson['sessionQr'] !=null) {
-            $instance = WhatsappInstance::where('session_name','=',$decodedJson['sessionQr'])->first();
+        if (isset($decodedJson['imageUrl']) && $decodedJson['imageUrl'] != null && isset($decodedJson['sessionQr']) && $decodedJson['sessionQr'] != null) {
+            $instance = WhatsappInstance::where('session_name', '=', $decodedJson['sessionQr'])->first();
             $instance->qr_code = $decodedJson['imageUrl'];
             $instance->save();
         }
@@ -85,9 +86,9 @@ class ChatsController extends Controller
     public function statusSession(Request $request)
     {
         $decodedJson = json_decode($request->getContent(), true);
-        if($decodedJson['status'] == 'successChat') {
+        if ($decodedJson['status'] == 'successChat') {
             $instance = WhatsappInstance::where('session_name', '=', $decodedJson['session'])->first();
-            if($instance->status == 0) {
+            if ($instance->status == 0) {
                 $instance->status = 1;
                 $instance->qr_code = null;
                 $instance->save();
@@ -101,7 +102,7 @@ class ChatsController extends Controller
     public function selfInfo(Request $request)
     {
         $decodedJson = json_decode($request->getContent(), true);
-        if($decodedJson['status'] == 'successChat') {
+        if ($decodedJson['status'] == 'successChat') {
             $instance = WhatsappInstance::where('session_name', '=', $decodedJson['session'])->first();
             $instance->instance_username = $decodedJson['name'];
             $instance->instance_phone = $decodedJson['phone'];
@@ -115,7 +116,7 @@ class ChatsController extends Controller
     public function disconnection(Request $request)
     {
         $decodedJson = json_decode($request->getContent(), true);
-        if($decodedJson['state'] == 'DISCONNECTED') {
+        if ($decodedJson['state'] == 'DISCONNECTED') {
             DB::table('whatsapp_instances')
                 ->where('instance_phone', $decodedJson['phone'])
                 ->update(['status' => 0]);
@@ -125,8 +126,8 @@ class ChatsController extends Controller
     public function unplug(Request $request, $id)
     {
         $instance = WhatsappInstance::find($id);
-        if(empty($instance)) {
-            return response()->json(['message' => 'Instance not found']); 
+        if (empty($instance)) {
+            return response()->json(['message' => 'Instance not found']);
         }
         $url = env('MESSAGE_API_URL') . '/whatsapp/close-session';
         try {
@@ -148,13 +149,14 @@ class ChatsController extends Controller
         }
     }
 
-    public function createSession(Request $request, $id) {
+    public function createSession(Request $request, $id)
+    {
         $instance = WhatsappInstance::find($id);
-        if(empty($instance)) {
-            return response()->json(['message' => 'Instance not found']); 
+        if (empty($instance)) {
+            return response()->json(['message' => 'Instance not found']);
         }
         $data = [
-           'sessionName' => $instance->session_name, 
+            'sessionName' => $instance->session_name,
         ];
         // Define the URL of the endpoint
         $url = env('MESSAGE_API_URL') . '/whatsapp/create-session';
@@ -195,7 +197,7 @@ class ChatsController extends Controller
                 // Phone number is not unique
                 return redirect()->route('instances')->with('status', 'Instância não encontrada');
             }
-            if($instance->status == 0) {
+            if ($instance->status == 0) {
                 return redirect()->route('instances')->with('status', 'Chat Session Has Been Expired!');
             }
 
@@ -212,10 +214,10 @@ class ChatsController extends Controller
                 $whatsappMessage->messageTime = $request->input('messageTime');
                 $whatsappMessage->messageText = $request->input('message');
                 $whatsappMessage->status = 1;
-                
+
                 // Prepare the data to send in the request
                 $data = [
-                    'to' => $request->input('phone').'@c.us',
+                    'to' => $request->input('phone') . '@c.us',
                     'message' => $request->input('message'),
                     'messageType' => $request->input('messageType'),
                     'messageImg' => $request->input('messageImg'),
@@ -229,19 +231,19 @@ class ChatsController extends Controller
                 ];
                 // Handle different media types
                 $mediaTypes = ['messageImg', 'messageAudio', 'messageVideo', 'messageDocument', 'messageRecording'];
-    
+
                 foreach ($mediaTypes as $inputName) {
                     if ($request->has($inputName)) {
                         $base64Data = $request->input($inputName);
                         $extension = $request->input('extension'); // Get the extension from the form
                         $decodedData = base64_decode($base64Data);
-    
+
                         if ($decodedData !== false) {
                             // Construct the subdirectory path
                             $subdirectory = 'whatsapp';
-    
+
                             // Generate a unique filename within the subdirectory
-                            $filename = $subdirectory . '/' . $request->input('fileName') .'-'.Str::uuid()->toString() . '.' . $extension;
+                            $filename = $subdirectory . '/' . $request->input('fileName') . '-' . Str::uuid()->toString() . '.' . $extension;
                             // Save the file using Storage::disk
                             Storage::disk('public')->put($filename, $decodedData);
                             $data['fullPath'] = Storage::disk('public')->path($filename);
@@ -304,15 +306,15 @@ class ChatsController extends Controller
     {
         try {
             DB::beginTransaction(); // Start a database transaction
-    
+
             // Get the JSON message from the request
             $data = json_decode($request->getContent(), true);
-    
+
             // Extract required data
             $phone = (int)str_replace('@c.us', '', $data['from']);
             $session = $data['session'];
             $newContactId = $phone . $session;
-    
+
             // Iterate over the message chunks and publish them separately
             // Find the record in WhatsappContact based on its 'id' column
             $whatsappInstance = WhatsappInstance::where('session_name', '=', $session)->first();
@@ -326,25 +328,25 @@ class ChatsController extends Controller
                 $whatsappMessage->sender_id = $whatsappInstance->user_id;
                 $whatsappMessage->messageTime = date('h:i A');
                 $whatsappMessage->status = 1;
-    
-                if($data['type'] == 'chat') {
+
+                if ($data['type'] == 'chat') {
                     $whatsappMessage->messageText = $data['content'];
                 }
-                if($data['type'] == 'image') {
+                if ($data['type'] == 'image') {
                     $whatsappMessage->messageMedia = $data['content'];
                     $whatsappMessage->messageText = $data['caption'] ?? '';
                 }
-                if($data['type'] == 'ptt') {
+                if ($data['type'] == 'ptt') {
                     $whatsappMessage->messageRecording = $data['content'];
                     $whatsappMessage->messageText = $data['caption'] ?? '';
                 }
-                if($data['type'] == 'document') {
+                if ($data['type'] == 'document') {
                     $whatsappMessage->messageDocument = $data['content'];
                     $whatsappMessage->messageText = $data['caption'] ?? '';
                 }
-    
+
                 $whatsappMessage->save();
-                
+
                 // Update the status of messages to 1
                 DB::table('whatsapp_messages')
                     ->where('whatsapp_user_id', $newContactId)
@@ -371,7 +373,7 @@ class ChatsController extends Controller
                 //     $chunkData['content'] = $chunk; // Replace content with the chunk
                 //     // Publish the chunk using Pusher
                 // }
-    
+
                 DB::commit(); // Commit the database transaction
                 return response()->json(['message' => 'Message replied and saved successfully', 'data' => $data]);
             }
@@ -383,24 +385,25 @@ class ChatsController extends Controller
         }
     }
 
-    public function receive(Request $request) {
+    public function receive(Request $request)
+    {
         try {
             DB::beginTransaction(); // Start a database transaction
-    
+
             // Get the JSON message from the request
             $data = json_decode($request->getContent(), true);
-    
+
             // Extract required data
             $phone = (int)str_replace('@c.us', '', $data['from']);
             $session = $data['_session'];
             $newContactId = $phone . $session;
             $notifyName = $data['notifyName'];
-    
+
             $profilePicFull = null;
-            if(isset($data['sender']['profilePicThumbObj']['imgFull'])) {
+            if (isset($data['sender']['profilePicThumbObj']['imgFull'])) {
                 $profilePicFull = $data['sender']['profilePicThumbObj']['imgFull'];
             }
-    
+
             // Iterate over the message chunks and publish them separately
             // Find the record in WhatsappContact based on its 'id' column
             $whatsappContact = WhatsappContact::find($newContactId);
@@ -410,7 +413,7 @@ class ChatsController extends Controller
                 $whatsappContact->username = $notifyName;
                 $whatsappContact->profile = $profilePicFull ? $profilePicFull : $whatsappContact->profile;
                 $whatsappContact->save();
-    
+
                 if ($data['type'] == 'image' || $data['type'] == 'document' || $data['type'] == 'audio' || $data['type'] == 'ptt' || $data['type'] == 'video') {
                     // Save the base64 content as a file using Laravel Storage
                     $fileContent = base64_decode($data['mediaContent']);
@@ -421,56 +424,56 @@ class ChatsController extends Controller
                     }
                     // Use the provided filename or generate a unique one
                     $fileName = $data['filename'] ?? (Str::uuid()->toString() . '.' . $fileExtension);
-    
+
                     // Determine the subdirectory based on the type
                     $subdirectory = 'whatsapp'; // You can change this based on the type
-    
+
                     // Generate a unique filename within the subdirectory
-                    $fullPath = $subdirectory . '/' .Str::uuid()->toString() .''. $fileName;
-    
+                    $fullPath = $subdirectory . '/' . Str::uuid()->toString() . '' . $fileName;
+
                     // Save the file using Storage::disk
                     Storage::disk('public')->put($fullPath, $fileContent);
-    
+
                     // Build the full URL to access the media
                     $blobUrl = url(Storage::disk('public')->url($fullPath));
-    
+
                     // Update $data['content'] with the blob URL
                     $data['content'] = $blobUrl;
                     $data['body'] = $blobUrl;
                 }
-    
+
                 // Create a new WhatsappMessage instance and populate it with the request data
                 $whatsappMessage = new WhatsappMessage();
                 $whatsappMessage->whatsapp_user_id = $newContactId;
                 $whatsappMessage->sender_id = $phone;
                 $whatsappMessage->messageTime = date('h:i A');
-    
-                if($data['type'] == 'chat') {
+
+                if ($data['type'] == 'chat') {
                     $whatsappMessage->messageText = $data['content'];
                 }
-                if($data['type'] == 'image') {
+                if ($data['type'] == 'image') {
                     $whatsappMessage->messageMedia = $data['content'];
                     $whatsappMessage->messageText = $data['caption'] ?? '';
                 }
-                if($data['type'] == 'audio') {
+                if ($data['type'] == 'audio') {
                     $whatsappMessage->messageMedia = $data['content'];
                     $whatsappMessage->messageText = $data['caption'] ?? '';
                 }
-                if($data['type'] == 'video') {
+                if ($data['type'] == 'video') {
                     $whatsappMessage->messageMedia = $data['content'];
                     $whatsappMessage->messageText = $data['caption'] ?? '';
                 }
-                if($data['type'] == 'ptt') {
+                if ($data['type'] == 'ptt') {
                     $whatsappMessage->messageRecording = $data['content'];
                     $whatsappMessage->messageText = $data['caption'] ?? '';
                 }
-                if($data['type'] == 'document') {
+                if ($data['type'] == 'document') {
                     $whatsappMessage->messageDocument = $data['content'];
                     $whatsappMessage->messageText = $data['caption'] ?? '';
                 }
-    
+
                 $whatsappMessage->save();
-    
+
                 $data['success'] = true;
 
                 $required_content = [
@@ -496,13 +499,13 @@ class ChatsController extends Controller
                 //     $chunkData['content'] = $chunk; // Replace content with the chunk
                 //     // Publish the chunk using Pusher
                 // }
-    
+
                 DB::commit(); // Commit the database transaction
                 return response()->json(['message' => 'Message received and saved successfully', 'data' => $data]);
             } else {
                 // Create the error message array
                 $errorMessage = ['content' => 'Message chunk received but does not get saved', 'data' => $data];
-    
+
                 // Return an error JSON response
                 event(new Receive($errorMessage, 'receive-channel', 'receive'));
                 return response()->json(['message' => 'Message received failed']);
@@ -526,7 +529,7 @@ class ChatsController extends Controller
             // Phone number is not unique
             return redirect()->route('instances')->with('status', 'Instância não encontrada');
         }
-        if($instance->status == 0) {
+        if ($instance->status == 0) {
             return redirect()->route('instances')->with('status', 'Chat Session Has Been Expired!');
         }
         $contactId = $validatedData['phone'] . $instance->session_name;
@@ -557,7 +560,7 @@ class ChatsController extends Controller
             // Phone number is not unique
             return redirect()->route('instances')->with('status', 'Instância não encontrada');
         }
-        if($instance->status == 0) {
+        if ($instance->status == 0) {
             return redirect()->route('instances')->with('status', 'Chat Session Has Been Expired!');
         }
         $contact = WhatsappContact::find($id);
@@ -565,7 +568,7 @@ class ChatsController extends Controller
             redirect()->route('chat', ['id' => $instance_id])->with('status', 'Contato não encontrado!');
         } else {
             $contact->delete();
-    
+
             return redirect()->route('chat', ['id' => $instance_id])->with('status', 'Contato excluído com sucesso!');
         }
     }
@@ -582,19 +585,19 @@ class ChatsController extends Controller
             // Phone number is not unique
             return redirect()->route('instances')->with('status', 'Instância não encontrada');
         }
-        if($instance->status == 0) {
+        if ($instance->status == 0) {
             return redirect()->route('instances')->with('status', 'Chat Session Has Been Expired!');
         }
         // Update the status of messages to 1
         DB::table('whatsapp_messages')
-                ->where('whatsapp_user_id', $validatedData['whatsapp_user_id'])
-                ->where('status', '=', 0)
-                ->update(['status' => 1]);
+            ->where('whatsapp_user_id', $validatedData['whatsapp_user_id'])
+            ->where('status', '=', 0)
+            ->update(['status' => 1]);
 
         // Retrieve messages that match whatsapp_user_id
         $messages = DB::table('whatsapp_messages')
-                ->where('whatsapp_messages.whatsapp_user_id', $validatedData['whatsapp_user_id'])
-                ->get();
+            ->where('whatsapp_messages.whatsapp_user_id', $validatedData['whatsapp_user_id'])
+            ->get();
 
         // Retrieve messages that match whatsapp_user_id
         $recipient = WhatsappContact::find($validatedData['whatsapp_user_id']);
@@ -613,14 +616,14 @@ class ChatsController extends Controller
         ]);
         // Update the status of messages to 1
         DB::table('whatsapp_messages')
-                ->where('whatsapp_user_id', $validatedData['whatsapp_user_id'])
-                ->where('status', '=', 0)
-                ->update(['status' => 1]);
-    
+            ->where('whatsapp_user_id', $validatedData['whatsapp_user_id'])
+            ->where('status', '=', 0)
+            ->update(['status' => 1]);
+
         return response()->json(['message' => 'Message already seen']);
     }
 
-    public function instances(Request $request) 
+    public function instances(Request $request)
     {
         $instances = WhatsappInstance::all();
 
@@ -669,29 +672,68 @@ class ChatsController extends Controller
         DB::beginTransaction();
         try {
             $instance = WhatsappInstance::find($id);
-    
+
             if (empty($instance)) {
                 redirect()->route('instances')->with('status', 'Instância não encontrado!');
             }
             // $sessionNames = [$instance->session_name];
-            
+
             // $url = env('MESSAGE_API_URL') . '/auto-replies/session_names';
 
             // $response = Http::delete($url, ['session_names' => $sessionNames]);
-            
+
             $instance->delete();
-    
+
             DB::commit();
             return redirect()->route('instances')->with('status', 'Instância excluído com sucesso!');
         } catch (\Exception $e) {
             // Something went wrong, so we'll roll back the transaction
             DB::rollBack();
-    
+
             // Handle the exception or error
             Log::error($e);
-    
+
             return redirect()->back()->with('status', 'Erro ao excluir a Instância');
         }
     }
 
+    function CreateChannelQR(Request $request)
+    {
+        try {
+            $token = '4iwkxsPQQqrbuNtkaUse9NrlxnHlONks';
+
+            $channelResponse = Http::accept('application/json')
+                ->withToken($token)
+                ->get(config('app.WHAPI_API_URL') . 'health');
+
+            if ($channelResponse->successful() && !empty($channelResponse->object())) {
+                $channelResponse = $channelResponse->object();
+                if (!empty($channelResponse) && !empty($channelResponse->user)) {
+                    $channelUser = $channelResponse->user;
+                    $instance = WhatsappInstance::find($request->instance_id);
+                    $instance->instance_phone = $channelUser->id;
+                    $instance->instance_username = $channelUser->name;
+                    $instance->status = 1;
+                    $instance->save();
+
+                    return ['url' => '', 'time_out' => 0, 'refresh' => true];
+                }
+            }
+
+            $response = Http::accept('application/json')
+                ->withToken($token)
+                ->get(config('app.WHAPI_API_URL') . 'users/login');
+
+            if ($response->successful() && !empty($response->object())) {
+                $response = $response->object();
+
+                if (!empty($response) && !empty($response->base64)) {
+                    return ['url' => $response->base64, 'time_out' => $response->expire];
+                }
+            }
+        } catch (Exception $e) {
+            Log::error($e);
+        }
+        return ['url' => '', 'time_out' => 5];
+    }
 }
