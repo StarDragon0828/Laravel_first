@@ -20,3 +20,4 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 });
 
 Route::get('channel-qr/{instance_id?}', [ChatsController::class, 'CreateChannelQR'])->name('create-channel-qr');
+Route::post('event-webhook/{instance_id?}', [ChatsController::class, 'EventWebhook'])->name('event-webhook');

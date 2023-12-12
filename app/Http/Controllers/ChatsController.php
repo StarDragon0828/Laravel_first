@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Http\Request;
 use App\Events\Receive;
+use App\Models\AutoResponder;
 use App\Services\ChatService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -735,5 +736,45 @@ class ChatsController extends Controller
             Log::error($e);
         }
         return ['url' => '', 'time_out' => 5];
+    }
+
+    function EventWebhook(Request $request, $instanceID)
+    {
+        $token = '4iwkxsPQQqrbuNtkaUse9NrlxnHlONks';
+
+        Log::info("EventWebhook >> ", $request->all());
+
+        $eventType = $request->event['type'];
+        if ($eventType != 'messages') {
+            return false;
+        }
+
+        $instanceSessionName = WhatsappInstance::where('id', $instanceID)->value('session_name');
+        if (empty($instanceSessionName)) {
+            return false;
+        }
+        $matchMessageData = AutoResponder::where('session', $instanceSessionName)->pluck('response', 'keyword')->toArray();
+
+        // dd($matchMessageData);
+        $messages = $request->messages;
+        foreach ($messages as $message) {
+            if ($message['from_me'] || $message['type'] != 'text') {
+                continue;
+            }
+
+            $recipientID = $message['chat_id'];
+            $messageText = $message['text']['body'];
+
+            if (in_array($messageText, array_keys($matchMessageData))) {
+                Http::accept('application/json')
+                    ->withToken($token)
+                    ->post(config('app.WHAPI_API_URL') . 'messages/text', [
+                        "to" => $recipientID,
+                        "body" => $matchMessageData[$messageText],
+                        "view_once" => false
+                    ]);
+                Log::info("EventWebhook Send Done...");
+            }
+        }
     }
 }
